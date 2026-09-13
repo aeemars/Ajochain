@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AjoChain — On-Chain Group Savings</title>
+    <meta name="description" content="AjoChain: Digital ajo — pool contributions, auto-release when funded, no middleman. Built on Arbitrum.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Toast notifications -->
+    <div id="toast-container"></div>
+
+    <!-- ─── Header ──────────────────────────────────────────────── -->
+    <header>
+        <div class="header-inner">
+            <div class="logo">
+                <span class="logo-icon">⬡</span>
+                <h1>AjoChain</h1>
+                <span class="network-badge">Arbitrum Sepolia</span>
+            </div>
+            <div class="wallet-info">
+                <span class="wallet-address" id="wallet-display" style="display:none"></span>
+                <button class="btn btn-primary" id="connect-btn">
+                    Connect Wallet
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- ─── Hero ────────────────────────────────────────────── -->
+        <section class="hero">
+            <h2>On-Chain Group Savings</h2>
+            <p>Pool contributions toward a shared goal. Funds auto-release when the target is met — <span class="hero-accent">permissionlessly</span>.</p>
+        </section>
+
+        <!-- ─── Navigation Tabs ─────────────────────────────────── -->
+        <nav class="tabs" id="main-tabs">
+            <button class="tab active" data-tab="groups" id="tab-groups">
+                📋 Groups
+            </button>
+            <button class="tab" data-tab="create" id="tab-create">
+                ✦ Create Group
+            </button>
+        </nav>
+
+        <!-- ═══ Groups List View ════════════════════════════════════ -->
+        <section id="groups-view" class="view active">
+            <div id="groups-grid" class="groups-grid">
+                <!-- Rendered by app.js -->
+            </div>
+            <div id="empty-state" class="empty-state" style="display:none">
+                <div class="empty-state-icon">⬡</div>
+                <p>No groups found. Create the first one!</p>
+                <button class="btn btn-primary" onclick="switchTab('create')">
+                    ✦ Create Group
+                </button>
+            </div>
+            <div id="loading-state" class="empty-state">
+                <div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto var(--space-md)"></div>
+                <p>Loading groups...</p>
+            </div>
+        </section>
+
+        <!-- ═══ Create Group View ═══════════════════════════════════ -->
+        <section id="create-view" class="view">
+            <div class="card form-card">
+                <h3>Create New Group</h3>
+                <form id="create-form">
+                    <div class="form-group">
+                        <label for="input-members">Member Addresses</label>
+                        <textarea
+                            id="input-members"
+                            placeholder="0xAbc123...&#10;0xDef456...&#10;0x789Ghi..."
+                            rows="4"
+                        ></textarea>
+                        <span class="form-help">One Ethereum address per line. Include your own address if you want to contribute.</span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="input-target">Target Amount (USDC)</label>
+                            <input
+                                type="number"
+                                id="input-target"
+                                placeholder="100.00"
+                                step="0.01"
+                                min="0.01"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="input-deadline">Deadline</label>
+                            <input type="datetime-local" id="input-deadline">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="input-payout">Payout Address</label>
+                        <input
+                            type="text"
+                            id="input-payout"
+                            placeholder="0x... address that receives the funds"
+                        >
+                        <span class="form-help">The address that receives the pooled funds once the target is met.</span>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg btn-full" id="create-btn">
+                        Create Group
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- ═══ Group Detail View ═══════════════════════════════════ -->
+        <section id="detail-view" class="view">
+            <button class="btn btn-ghost" id="back-btn" onclick="switchTab('groups')">
+                ← Back to Groups
+            </button>
+            <div class="card detail-card">
+                <!-- Header -->
+                <div class="detail-header">
+                    <h3>Group #<span id="detail-id">0</span></h3>
+                    <span id="detail-status" class="status-badge status-open">Open</span>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-section">
+                    <div class="progress-info">
+                        <span>
+                            <span class="progress-amount" id="detail-contributed">0.00</span>
+                            <span class="progress-target"> / <span id="detail-target">0.00</span> USDC</span>
+                        </span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="detail-progress" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-percent" id="detail-percent">0%</div>
+                </div>
+
+                <!-- Info -->
+                <div class="detail-info">
+                    <div class="info-item">
+                        <span class="info-label">Payout Address</span>
+                        <span class="info-value" id="detail-payout">—</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Deadline</span>
+                        <span class="info-value" id="detail-deadline">—</span>
+                    </div>
+                </div>
+
+                <!-- Members -->
+                <div class="members-section">
+                    <h4>Members & Contributions</h4>
+                    <div id="members-list" class="members-list">
+                        <!-- Rendered by app.js -->
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="actions" id="detail-actions">
+                    <!-- Contribute form -->
+                    <div class="contribute-form" id="contribute-section" style="display:none">
+                        <div class="form-group">
+                            <label for="input-contribute-amount">Amount (USDC)</label>
+                            <input type="number" id="input-contribute-amount" placeholder="50.00" step="0.01" min="0.01">
+                        </div>
+                        <button class="btn btn-primary btn-lg" id="contribute-btn" onclick="handleContribute()">
+                            Contribute
+                        </button>
+                    </div>
+
+                    <!-- Release button -->
+                    <button class="btn btn-green btn-lg btn-full" id="release-btn" style="display:none" onclick="handleRelease()">
+                        🔓 Release Funds (Permissionless)
+                    </button>
+
+                    <!-- Refund button -->
+                    <button class="btn btn-danger btn-lg btn-full" id="refund-btn" style="display:none" onclick="handleRefund()">
+                        ↩ Refund My Contribution
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ─── Footer ──────────────────────────────────────────────── -->
+    <footer>
+        <p>AjoChain — Built for the Arbitrum Open House Singapore Buildathon 2025</p>
+    </footer>
+
+    <!-- ─── Scripts ─────────────────────────────────────────────── -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.1/dist/ethers.umd.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
