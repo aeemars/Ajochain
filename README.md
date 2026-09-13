@@ -6,7 +6,7 @@ Built for the [Arbitrum Open House Singapore Buildathon](https://www.hackquest.i
 
 ---
 
-## 🌍 Why AjoChain?
+## Why AjoChain?
 
 In West Africa, **"ajo"** (Yoruba) or "esusu" is a centuries-old practice where a group of people pool money regularly, and the total pot rotates to each member in turn. It's how millions of people save, pay rent, and split bills — without banks.
 
