@@ -183,6 +183,3 @@ forge test -vvv
 
 ---
 
-## 📜 License
-
-MIT
