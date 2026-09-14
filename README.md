@@ -54,13 +54,13 @@ graph TB
 
 ---
 
-## 🔑 Key Feature: Permissionless Release
+## Key Feature: Permissionless Release
 
 The star of the demo: `releaseFunds()` is a **public function with no access control**. Once the contribution target is met, literally anyone — a group member, the convenience bot, or even a judge with their own wallet — can trigger the release. The contract checks the condition and pays out. No keys, no admin, no trust required.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Ajochain/
@@ -91,7 +91,7 @@ Ajochain/
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Deploy the Contract (via Remix)
 
@@ -138,7 +138,7 @@ forge test -vvv
 
 ---
 
-## 🧪 Test Coverage
+## Test Coverage
 
 | Test | Description |
 |------|-------------|
@@ -155,7 +155,7 @@ forge test -vvv
 
 ---
 
-## 🛡 Security Notes
+## Security Notes
 
 > **This is a hackathon MVP, not production code.** The following security measures are in place, but a formal audit is recommended before any mainnet deployment.
 
@@ -180,12 +180,6 @@ forge test -vvv
 | Backend | Go 1.22+, go-ethereum, chi, SQLite |
 | Frontend | Vanilla JS, ethers.js 6.x |
 | Network | Arbitrum Sepolia (testnet) |
-
----
-
-## 👥 Team
-
-*[Your team info here]*
 
 ---
 
