@@ -13,7 +13,7 @@ const CONFIG = {
     // Arbitrum Sepolia Chain Parameters (EIP-3085 & EIP-3326 compliant)
     CHAIN_ID: 421614,
     CHAIN_HEX: '0x66eee',
-    CHAIN_NAME: 'Arbitrum Sepolia',
+    CHAIN_NAME: 'Arbitrum Sepolia', 
     RPC_URL: 'https://sepolia-rollup.arbitrum.io/rpc',
     RPC_URLS: [
         'https://sepolia-rollup.arbitrum.io/rpc',
