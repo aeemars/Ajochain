@@ -11,8 +11,8 @@ contracts/lib/
 # ─── Go ─────────────────────────────────────────────────────────────
 backend/bin/
 backend/tmp/
-backend/*.db
-backend/*.sqlite
+backend/*.db*
+backend/*.sqlite*
 
 # ─── Node (if any tooling added later) ──────────────────────────────
 node_modules/
