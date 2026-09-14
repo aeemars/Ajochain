@@ -1,24 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════
-   AjoChain — Frontend Logic
-   Vanilla JS + ethers.js for MetaMask + contract interaction
+   AjoChain — Emil Kowalski Inspired Frontend Logic
+   Vanilla JS + ethers.js + Spring Micro-Interactions + Sonner Toasts
    ═══════════════════════════════════════════════════════════════════ */
 
 // ─── Configuration ─────────────────────────────────────────────────
-// Update these after deploying your contracts via Remix
 const CONFIG = {
-    // Deployed AjoGroup contract address on Arbitrum Sepolia
     AJOGROUP_ADDRESS: '0x_YOUR_AJOGROUP_CONTRACT_ADDRESS',
-
-    // USDC token address on Arbitrum Sepolia
     USDC_ADDRESS: '0x_YOUR_USDC_TOKEN_ADDRESS',
-
-    // USDC decimals (standard USDC = 6)
     USDC_DECIMALS: 6,
-
-    // Go backend API base URL (set to '' to disable API and use direct contract reads)
-    API_BASE: '',
-
-    // Arbitrum Sepolia chain ID
+    API_BASE: '', // Set to 'http://localhost:8080/api' when Go backend is running
     CHAIN_ID: 421614,
     CHAIN_NAME: 'Arbitrum Sepolia',
     RPC_URL: 'https://sepolia-rollup.arbitrum.io/rpc',
@@ -26,7 +16,6 @@ const CONFIG = {
 };
 
 // ─── Contract ABIs ─────────────────────────────────────────────────
-
 const AJOGROUP_ABI = [
     'function createGroup(address[] _members, uint256 _targetAmount, uint256 _deadline, address _payoutAddress) external returns (uint256)',
     'function contribute(uint256 groupId, uint256 amount) external',
@@ -50,7 +39,6 @@ const ERC20_ABI = [
 ];
 
 // ─── Global State ──────────────────────────────────────────────────
-
 let provider = null;
 let signer = null;
 let userAddress = null;
@@ -58,8 +46,10 @@ let ajoContract = null;
 let usdcContract = null;
 let currentGroupId = null;
 
-// ─── Initialization ────────────────────────────────────────────────
+// Sonner-style active toast queue
+let activeToasts = [];
 
+// ─── Initialization ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     // Wire up event listeners
     document.getElementById('connect-btn').addEventListener('click', connectWallet);
@@ -70,6 +60,41 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
 
+    // Initialize Emil sliding tab pill
+    updateTabPill();
+    window.addEventListener('resize', updateTabPill);
+
+    // Form preset actions
+    const btnAddMyAddress = document.getElementById('btn-add-my-address');
+    if (btnAddMyAddress) {
+        btnAddMyAddress.addEventListener('click', addMyAddressToMembers);
+    }
+
+    const btnSetPayoutMine = document.getElementById('btn-set-payout-mine');
+    if (btnSetPayoutMine) {
+        btnSetPayoutMine.addEventListener('click', setMyAddressAsPayout);
+    }
+
+    // Wallet display click-to-copy
+    const walletDisplay = document.getElementById('wallet-display');
+    if (walletDisplay) {
+        walletDisplay.addEventListener('click', () => {
+            if (userAddress) copyToClipboard(userAddress, 'Wallet address');
+        });
+    }
+
+    // Detail payout click-to-copy
+    const detailPayout = document.getElementById('detail-payout');
+    if (detailPayout) {
+        detailPayout.addEventListener('click', () => {
+            const addr = detailPayout.dataset.fullAddress;
+            if (addr) copyToClipboard(addr, 'Payout address');
+        });
+    }
+
+    // Attach spotlight effect to static cards
+    document.querySelectorAll('.card').forEach(attachSpotlight);
+
     // Auto-connect if previously connected
     if (window.ethereum && window.ethereum.selectedAddress) {
         connectWallet();
@@ -79,8 +104,115 @@ document.addEventListener('DOMContentLoaded', () => {
     loadGroups();
 });
 
-// ─── Wallet Connection ─────────────────────────────────────────────
+// ─── Sliding Segmented Tab Pill (Emil Kowalski Physics) ────────────
+function updateTabPill() {
+    const activeTab = document.querySelector('.tab.active');
+    const pill = document.getElementById('tab-pill');
+    if (!activeTab || !pill) return;
 
+    const offsetLeft = activeTab.offsetLeft;
+    const width = activeTab.offsetWidth;
+
+    pill.style.transform = `translateX(${offsetLeft - 4}px)`;
+    pill.style.width = `${width}px`;
+}
+
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    const targetTab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+    if (targetTab) {
+        targetTab.classList.add('active');
+        updateTabPill();
+    }
+
+    // Show/hide views with spring animation
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    const viewId = tabName === 'groups' ? 'groups-view' :
+                   tabName === 'create' ? 'create-view' :
+                   tabName === 'detail' ? 'detail-view' : null;
+    if (viewId) {
+        const view = document.getElementById(viewId);
+        view.classList.add('active');
+    }
+
+    if (tabName === 'groups') {
+        loadGroups();
+    }
+}
+
+// ─── Spotlight Cursor Illumination ─────────────────────────────────
+function attachSpotlight(element) {
+    if (!element || element.dataset.spotlightAttached) return;
+    element.dataset.spotlightAttached = 'true';
+    element.classList.add('spotlight-card');
+
+    element.addEventListener('mousemove', (e) => {
+        const rect = element.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        element.style.setProperty('--mouse-x', `${x}px`);
+        element.style.setProperty('--mouse-y', `${y}px`);
+    });
+}
+
+// ─── Quick Preset Helpers ──────────────────────────────────────────
+function setTargetAmount(amount) {
+    const input = document.getElementById('input-target');
+    if (input) {
+        input.value = amount;
+        input.focus();
+        showToast(`Target set to ${amount} USDC`, 'info');
+    }
+}
+
+function setDeadlinePreset(hours) {
+    const input = document.getElementById('input-deadline');
+    if (!input) return;
+
+    const targetDate = new Date(Date.now() + hours * 3600 * 1000);
+    // Format to YYYY-MM-DDTHH:MM
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
+    const hrs = String(targetDate.getHours()).padStart(2, '0');
+    const mins = String(targetDate.getMinutes()).padStart(2, '0');
+
+    input.value = `${year}-${month}-${day}T${hrs}:${mins}`;
+    showToast(`Deadline set to ${hours} hours from now`, 'info');
+}
+
+function addMyAddressToMembers() {
+    if (!userAddress) {
+        showToast('Please connect your wallet first', 'warning');
+        return;
+    }
+    const textarea = document.getElementById('input-members');
+    if (!textarea) return;
+
+    const currentText = textarea.value.trim();
+    if (currentText.toLowerCase().includes(userAddress.toLowerCase())) {
+        showToast('Your address is already in the members list', 'info');
+        return;
+    }
+
+    textarea.value = currentText ? `${currentText}\n${userAddress}` : userAddress;
+    showToast('Added your wallet to members list', 'success');
+}
+
+function setMyAddressAsPayout() {
+    if (!userAddress) {
+        showToast('Please connect your wallet first', 'warning');
+        return;
+    }
+    const input = document.getElementById('input-payout');
+    if (input) {
+        input.value = userAddress;
+        showToast('Payout address set to your wallet', 'success');
+    }
+}
+
+// ─── Wallet Connection ─────────────────────────────────────────────
 async function connectWallet() {
     if (!window.ethereum) {
         showToast('MetaMask not detected. Please install MetaMask.', 'error');
@@ -93,14 +225,11 @@ async function connectWallet() {
         btn.disabled = true;
 
         provider = new ethers.BrowserProvider(window.ethereum);
-
-        // Request account access
         await provider.send('eth_requestAccounts', []);
 
         // Check network
         const network = await provider.getNetwork();
         if (Number(network.chainId) !== CONFIG.CHAIN_ID) {
-            // Try to switch to Arbitrum Sepolia
             try {
                 await window.ethereum.request({
                     method: 'wallet_switchEthereumChain',
@@ -108,7 +237,6 @@ async function connectWallet() {
                 });
                 provider = new ethers.BrowserProvider(window.ethereum);
             } catch (switchError) {
-                // If the chain hasn't been added, add it
                 if (switchError.code === 4902) {
                     await window.ethereum.request({
                         method: 'wallet_addEthereumChain',
@@ -136,20 +264,21 @@ async function connectWallet() {
 
         // Update UI
         const shortAddr = userAddress.slice(0, 6) + '...' + userAddress.slice(-4);
-        document.getElementById('wallet-display').textContent = shortAddr;
-        document.getElementById('wallet-display').style.display = '';
+        const walletDisplay = document.getElementById('wallet-display');
+        walletDisplay.innerHTML = `${shortAddr} <span class="copy-icon">⧉</span>`;
+        walletDisplay.style.display = 'inline-flex';
         btn.textContent = 'Connected';
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-secondary');
         btn.disabled = false;
 
-        showToast(`Connected: ${shortAddr}`, 'success');
+        showToast(`Connected: ${shortAddr}`, 'success', 'Wallet Connected');
 
         // Listen for account/chain changes
         window.ethereum.on('accountsChanged', () => window.location.reload());
         window.ethereum.on('chainChanged', () => window.location.reload());
 
-        // Reload groups now that we have a signer
+        // Reload groups with signer
         loadGroups();
 
     } catch (err) {
@@ -161,31 +290,7 @@ async function connectWallet() {
     }
 }
 
-// ─── Tab Navigation ────────────────────────────────────────────────
-
-function switchTab(tabName) {
-    // Update tab buttons
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    const targetTab = document.querySelector(`.tab[data-tab="${tabName}"]`);
-    if (targetTab) targetTab.classList.add('active');
-
-    // Show/hide views
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    const viewId = tabName === 'groups' ? 'groups-view' :
-                   tabName === 'create' ? 'create-view' :
-                   tabName === 'detail' ? 'detail-view' : null;
-    if (viewId) {
-        document.getElementById(viewId).classList.add('active');
-    }
-
-    // Reload groups when returning to list
-    if (tabName === 'groups') {
-        loadGroups();
-    }
-}
-
-// ─── Load Groups ───────────────────────────────────────────────────
-
+// ─── Group Data Loading ────────────────────────────────────────────
 async function loadGroups() {
     const grid = document.getElementById('groups-grid');
     const emptyState = document.getElementById('empty-state');
@@ -193,7 +298,7 @@ async function loadGroups() {
 
     grid.innerHTML = '';
     emptyState.style.display = 'none';
-    loadingState.style.display = '';
+    if (loadingState) loadingState.style.display = 'grid';
 
     try {
         let groups = [];
@@ -212,21 +317,23 @@ async function loadGroups() {
             groups = await loadGroupsFromContract();
         }
 
-        loadingState.style.display = 'none';
+        if (loadingState) loadingState.style.display = 'none';
 
         if (groups.length === 0) {
-            emptyState.style.display = '';
+            emptyState.style.display = 'block';
             return;
         }
 
         groups.forEach(g => {
-            grid.appendChild(createGroupCard(g));
+            const card = createGroupCard(g);
+            grid.appendChild(card);
+            attachSpotlight(card);
         });
 
     } catch (err) {
         console.error('Error loading groups:', err);
-        loadingState.style.display = 'none';
-        emptyState.style.display = '';
+        if (loadingState) loadingState.style.display = 'none';
+        emptyState.style.display = 'block';
     }
 }
 
@@ -270,10 +377,9 @@ function computeStatus(released, totalContributed, targetAmount, deadline) {
 }
 
 // ─── Group Card Rendering ──────────────────────────────────────────
-
 function createGroupCard(group) {
     const card = document.createElement('div');
-    card.className = 'card group-card';
+    card.className = 'card group-card spotlight-card';
     card.onclick = () => viewGroupDetail(group.id);
 
     const contributed = formatUSDC(group.totalContributed);
@@ -298,7 +404,7 @@ function createGroupCard(group) {
             <span>⏰ ${deadline}</span>
         </div>
         <div class="progress-bar-mini">
-            <div class="progress-fill" style="width: ${pct}%"></div>
+            <div class="progress-fill" style="width: ${Math.min(pct, 100)}%"></div>
         </div>
     `;
 
@@ -306,7 +412,6 @@ function createGroupCard(group) {
 }
 
 // ─── Group Detail View ─────────────────────────────────────────────
-
 async function viewGroupDetail(groupId) {
     currentGroupId = groupId;
     switchTab('detail');
@@ -342,7 +447,6 @@ async function viewGroupDetail(groupId) {
                 status: computeStatus(released, totalContributed, targetAmount, Number(deadline)),
             };
 
-            // Get per-member contributions
             for (const member of group.members) {
                 const amount = await ajoContract.getContribution(groupId, member);
                 contributions.push({
@@ -389,10 +493,12 @@ function renderGroupDetail(group, contributions) {
     document.getElementById('detail-progress').style.width = `${Math.min(pct, 100)}%`;
     document.getElementById('detail-percent').textContent = `${pct.toFixed(1)}%`;
 
-    // Info
+    // Payout Address with click-to-copy
     const payoutAddr = group.payoutAddress;
-    document.getElementById('detail-payout').textContent =
-        payoutAddr.slice(0, 8) + '...' + payoutAddr.slice(-6);
+    const detailPayout = document.getElementById('detail-payout');
+    detailPayout.textContent = payoutAddr.slice(0, 8) + '...' + payoutAddr.slice(-6) + ' ⧉';
+    detailPayout.dataset.fullAddress = payoutAddr;
+
     document.getElementById('detail-deadline').textContent = formatDeadline(group.deadline);
 
     // Members
@@ -412,17 +518,18 @@ function renderGroupDetail(group, contributions) {
         const row = document.createElement('div');
         row.className = 'member-row';
         row.innerHTML = `
-            <span class="member-address ${isYou ? 'is-you' : ''}">
-                ${member.slice(0, 8)}...${member.slice(-6)} ${isYou ? '(you)' : ''}
+            <span class="member-address ${isYou ? 'is-you' : ''}" title="Click to copy">
+                ${member.slice(0, 8)}...${member.slice(-6)} ${isYou ? '(you)' : ''} ⧉
             </span>
             <span class="member-amount ${hasContributed ? 'contributed' : 'pending'}">
                 ${displayAmount} USDC
             </span>
         `;
+        row.onclick = () => copyToClipboard(member, 'Member address');
         membersList.appendChild(row);
     });
 
-    // Action buttons — show based on status and membership
+    // Action buttons
     const contributeSection = document.getElementById('contribute-section');
     const releaseBtn = document.getElementById('release-btn');
     const refundBtn = document.getElementById('refund-btn');
@@ -436,165 +543,168 @@ function renderGroupDetail(group, contributions) {
     );
 
     if (status === 'open' && isMember) {
-        contributeSection.style.display = '';
+        contributeSection.style.display = 'flex';
     }
 
     if (status === 'funded') {
-        releaseBtn.style.display = '';
+        releaseBtn.style.display = 'inline-flex';
         releaseBtn.classList.add('btn-release-ready');
     }
 
     if (status === 'refundable' && isMember) {
-        refundBtn.style.display = '';
+        refundBtn.style.display = 'inline-flex';
     }
 }
 
-// ─── Create Group ──────────────────────────────────────────────────
-
+// ─── Create Group Handler ──────────────────────────────────────────
 async function handleCreateGroup(e) {
     e.preventDefault();
 
     if (!signer) {
-        showToast('Connect your wallet first', 'warning');
+        showToast('Please connect your wallet first', 'warning');
+        return;
+    }
+
+    const membersRaw = document.getElementById('input-members').value;
+    const targetRaw = document.getElementById('input-target').value;
+    const deadlineRaw = document.getElementById('input-deadline').value;
+    const payoutRaw = document.getElementById('input-payout').value;
+
+    const members = membersRaw
+        .split('\n')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+    if (members.length === 0) {
+        showToast('Enter at least one member address', 'error');
+        return;
+    }
+
+    for (const m of members) {
+        if (!ethers.isAddress(m)) {
+            showToast(`Invalid member address: ${m}`, 'error');
+            return;
+        }
+    }
+
+    const targetNum = parseFloat(targetRaw);
+    if (!targetNum || targetNum <= 0) {
+        showToast('Enter a valid target amount (> 0)', 'error');
+        return;
+    }
+    const targetAmount = ethers.parseUnits(targetRaw, CONFIG.USDC_DECIMALS);
+
+    if (!deadlineRaw) {
+        showToast('Select a deadline', 'error');
+        return;
+    }
+    const deadlineTimestamp = Math.floor(new Date(deadlineRaw).getTime() / 1000);
+    const now = Math.floor(Date.now() / 1000);
+    if (deadlineTimestamp <= now) {
+        showToast('Deadline must be in the future', 'error');
+        return;
+    }
+
+    if (!payoutRaw || !ethers.isAddress(payoutRaw)) {
+        showToast('Enter a valid payout address', 'error');
         return;
     }
 
     const btn = document.getElementById('create-btn');
-    const originalText = btn.textContent;
+    const originalText = btn.innerHTML;
 
     try {
-        // Parse form
-        const membersRaw = document.getElementById('input-members').value.trim();
-        const members = membersRaw.split('\n')
-            .map(s => s.trim())
-            .filter(s => s.length > 0 && ethers.isAddress(s));
-
-        if (members.length === 0) {
-            showToast('Enter at least one valid Ethereum address', 'error');
-            return;
-        }
-
-        const targetInput = parseFloat(document.getElementById('input-target').value);
-        if (!targetInput || targetInput <= 0) {
-            showToast('Enter a valid target amount', 'error');
-            return;
-        }
-        const targetAmount = ethers.parseUnits(targetInput.toString(), CONFIG.USDC_DECIMALS);
-
-        const deadlineInput = document.getElementById('input-deadline').value;
-        if (!deadlineInput) {
-            showToast('Select a deadline', 'error');
-            return;
-        }
-        const deadline = Math.floor(new Date(deadlineInput).getTime() / 1000);
-        if (deadline <= Math.floor(Date.now() / 1000)) {
-            showToast('Deadline must be in the future', 'error');
-            return;
-        }
-
-        const payoutAddress = document.getElementById('input-payout').value.trim();
-        if (!ethers.isAddress(payoutAddress)) {
-            showToast('Enter a valid payout address', 'error');
-            return;
-        }
-
-        // Send transaction
-        btn.innerHTML = '<span class="spinner"></span> Creating...';
+        btn.innerHTML = '<span class="spinner"></span> Creating Group...';
         btn.disabled = true;
 
-        const tx = await ajoContract.createGroup(members, targetAmount, deadline, payoutAddress);
-        showToast('Transaction submitted. Waiting for confirmation...', 'info');
+        showToast('Submitting group creation...', 'info', 'Transaction Pending');
 
+        const tx = await ajoContract.createGroup(
+            members,
+            targetAmount,
+            deadlineTimestamp,
+            payoutRaw
+        );
+
+        showToast('Transaction submitted, waiting for confirmation...', 'info');
         const receipt = await tx.wait();
-        showToast('Group created successfully! 🎉', 'success');
 
-        // Parse the group ID from the event
-        const event = receipt.logs.find(log => {
-            try {
-                return ajoContract.interface.parseLog(log)?.name === 'GroupCreated';
-            } catch { return false; }
-        });
+        showToast('Group created successfully! ⬡', 'success', 'Confirmed');
 
-        if (event) {
-            const parsed = ajoContract.interface.parseLog(event);
-            const groupId = Number(parsed.args.groupId);
-            showToast(`Group #${groupId} created!`, 'success');
+        // Reset form
+        document.getElementById('create-form').reset();
 
-            // Reset form and navigate to detail
-            document.getElementById('create-form').reset();
-            viewGroupDetail(groupId);
-        } else {
-            switchTab('groups');
-        }
+        // Switch to groups view
+        switchTab('groups');
 
     } catch (err) {
         console.error('Create group error:', err);
-        showToast('Create failed: ' + parseError(err), 'error');
+        showToast('Failed to create group: ' + parseError(err), 'error');
     } finally {
-        btn.textContent = originalText;
+        btn.innerHTML = originalText;
         btn.disabled = false;
     }
 }
 
-// ─── Contribute ────────────────────────────────────────────────────
-
+// ─── Contribute Handler ────────────────────────────────────────────
 async function handleContribute() {
     if (!signer || currentGroupId === null) {
         showToast('Connect your wallet first', 'warning');
         return;
     }
 
+    const input = document.getElementById('input-contribute-amount');
+    const amountRaw = input.value;
+    const amountNum = parseFloat(amountRaw);
+
+    if (!amountNum || amountNum <= 0) {
+        showToast('Enter a valid contribution amount', 'error');
+        return;
+    }
+
+    const amount = ethers.parseUnits(amountRaw, CONFIG.USDC_DECIMALS);
     const btn = document.getElementById('contribute-btn');
-    const originalText = btn.textContent;
+    const originalText = btn.innerHTML;
 
     try {
-        const amountInput = parseFloat(document.getElementById('input-contribute-amount').value);
-        if (!amountInput || amountInput <= 0) {
-            showToast('Enter a valid amount', 'error');
-            return;
-        }
-
-        const amount = ethers.parseUnits(amountInput.toString(), CONFIG.USDC_DECIMALS);
-
-        // Step 1: Check allowance and approve if needed
-        btn.innerHTML = '<span class="spinner"></span> Checking allowance...';
         btn.disabled = true;
 
+        // Check allowance
+        btn.innerHTML = '<span class="spinner"></span> Checking Allowance...';
         const currentAllowance = await usdcContract.allowance(userAddress, CONFIG.AJOGROUP_ADDRESS);
 
         if (currentAllowance < amount) {
             btn.innerHTML = '<span class="spinner"></span> Approving USDC...';
-            showToast('Step 1/2: Approving USDC spend...', 'info');
+            showToast('Approving USDC transfer...', 'info', 'Step 1 of 2');
 
             const approveTx = await usdcContract.approve(CONFIG.AJOGROUP_ADDRESS, amount);
             await approveTx.wait();
-            showToast('USDC approved ✓', 'success');
+            showToast('USDC approved! Now contributing...', 'success', 'Step 1 Complete');
         }
 
-        // Step 2: Contribute
+        // Contribute
         btn.innerHTML = '<span class="spinner"></span> Contributing...';
-        showToast('Step 2/2: Contributing USDC...', 'info');
+        showToast('Sending contribution...', 'info', 'Step 2 of 2');
 
-        const tx = await ajoContract.contribute(currentGroupId, amount);
-        await tx.wait();
+        const contributeTx = await ajoContract.contribute(currentGroupId, amount);
+        await contributeTx.wait();
 
-        showToast(`Contributed ${amountInput} USDC! 🎉`, 'success');
-        document.getElementById('input-contribute-amount').value = '';
+        showToast(`Contributed ${amountRaw} USDC! 💰`, 'success', 'Contribution Confirmed');
+        input.value = '';
 
         // Refresh detail view
         viewGroupDetail(currentGroupId);
 
     } catch (err) {
-        console.error('Contribute error:', err);
+        console.error('Contribution error:', err);
         showToast('Contribution failed: ' + parseError(err), 'error');
     } finally {
-        btn.textContent = originalText;
+        btn.innerHTML = originalText;
         btn.disabled = false;
     }
 }
 
-// ─── Release Funds ─────────────────────────────────────────────────
-
+// ─── Release Funds Handler (The Showstopper Demo Moment) ───────────
 async function handleRelease() {
     if (!signer || currentGroupId === null) {
         showToast('Connect your wallet first', 'warning');
@@ -605,16 +715,20 @@ async function handleRelease() {
     const originalText = btn.innerHTML;
 
     try {
-        btn.innerHTML = '<span class="spinner"></span> Releasing...';
+        btn.innerHTML = '<span class="spinner"></span> Releasing Funds...';
         btn.disabled = true;
 
         const tx = await ajoContract.releaseFunds(currentGroupId);
-        showToast('Release transaction submitted...', 'info');
+        showToast('Release transaction submitted...', 'info', 'Permissionless Release');
 
         await tx.wait();
-        showToast('Funds released! 🎉🔓', 'success');
 
-        // Refresh
+        // Trigger celebratory confetti explosion!
+        triggerConfetti();
+
+        showToast('Funds released to payout address! 🔓🎉', 'success', 'Goal Reached!');
+
+        // Refresh view
         viewGroupDetail(currentGroupId);
 
     } catch (err) {
@@ -626,8 +740,7 @@ async function handleRelease() {
     }
 }
 
-// ─── Refund ────────────────────────────────────────────────────────
-
+// ─── Refund Handler ────────────────────────────────────────────────
 async function handleRefund() {
     if (!signer || currentGroupId === null) {
         showToast('Connect your wallet first', 'warning');
@@ -638,16 +751,15 @@ async function handleRefund() {
     const originalText = btn.innerHTML;
 
     try {
-        btn.innerHTML = '<span class="spinner"></span> Refunding...';
+        btn.innerHTML = '<span class="spinner"></span> Processing Refund...';
         btn.disabled = true;
 
         const tx = await ajoContract.refund(currentGroupId);
         showToast('Refund transaction submitted...', 'info');
 
         await tx.wait();
-        showToast('Refund successful! Your USDC has been returned.', 'success');
+        showToast('Contribution refunded to your wallet! ↩', 'success', 'Refund Confirmed');
 
-        // Refresh
         viewGroupDetail(currentGroupId);
 
     } catch (err) {
@@ -659,8 +771,153 @@ async function handleRefund() {
     }
 }
 
-// ─── Utility Functions ─────────────────────────────────────────────
+// ─── Sonner-Style Stacked Toast Notifications ──────────────────────
+function showToast(message, type = 'info', title = null) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
 
+    const id = Date.now() + Math.random().toString(36).substr(2, 5);
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.id = `toast-${id}`;
+
+    const icons = {
+        success: '✓',
+        error: '✕',
+        info: 'ℹ',
+        warning: '⚠'
+    };
+
+    const defaultTitles = {
+        success: 'Success',
+        error: 'Error',
+        info: 'Notice',
+        warning: 'Warning'
+    };
+
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type] || 'ℹ'}</span>
+        <div class="toast-content">
+            <div class="toast-title">${title || defaultTitles[type]}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close" onclick="dismissToast('${id}')">✕</button>
+    `;
+
+    toast.onclick = (e) => {
+        if (!e.target.classList.contains('toast-close')) {
+            dismissToast(id);
+        }
+    };
+
+    container.appendChild(toast);
+    activeToasts.unshift({ id, el: toast });
+    updateToastStack();
+
+    // Auto-remove after 4.5s
+    setTimeout(() => {
+        dismissToast(id);
+    }, 4500);
+}
+
+function dismissToast(id) {
+    const idx = activeToasts.findIndex(t => t.id === id);
+    if (idx === -1) return;
+
+    const toastItem = activeToasts[idx];
+    toastItem.el.classList.add('leaving');
+
+    setTimeout(() => {
+        if (toastItem.el.parentNode) {
+            toastItem.el.remove();
+        }
+        activeToasts = activeToasts.filter(t => t.id !== id);
+        updateToastStack();
+    }, 280);
+}
+
+function updateToastStack() {
+    activeToasts.forEach((item, index) => {
+        item.el.dataset.index = index;
+    });
+}
+
+// ─── Clipboard Helper ──────────────────────────────────────────────
+async function copyToClipboard(text, label = 'Address') {
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast(`${label} copied to clipboard!`, 'info', 'Copied');
+    } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast(`${label} copied to clipboard!`, 'info', 'Copied');
+    }
+}
+
+// ─── 60fps Celebratory Confetti Engine ──────────────────────────────
+function triggerConfetti() {
+    const canvas = document.getElementById('confetti-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const colors = ['#9333ea', '#c084fc', '#06b6d4', '#67e8f9', '#10b981', '#34d399', '#ffffff'];
+    const particles = [];
+    const count = 90;
+
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: canvas.width / 2 + (Math.random() - 0.5) * 160,
+            y: canvas.height * 0.65,
+            vx: (Math.random() - 0.5) * 14,
+            vy: -Math.random() * 16 - 6,
+            size: Math.random() * 8 + 4,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            rotation: Math.random() * 360,
+            vRot: (Math.random() - 0.5) * 10,
+            alpha: 1,
+            decay: Math.random() * 0.015 + 0.01
+        });
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let alive = false;
+
+        particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.45; // gravity
+            p.rotation += p.vRot;
+            p.alpha -= p.decay;
+
+            if (p.alpha > 0) {
+                alive = true;
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+                ctx.restore();
+            }
+        });
+
+        if (alive) {
+            requestAnimationFrame(render);
+        } else {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+    requestAnimationFrame(render);
+}
+
+// ─── Format Helpers ────────────────────────────────────────────────
 function formatUSDC(amountWei) {
     try {
         const val = ethers.formatUnits(amountWei.toString(), CONFIG.USDC_DECIMALS);
@@ -702,7 +959,6 @@ function formatDeadline(unixTimestamp) {
             return `${formatted} (expired)`;
         }
 
-        // Show relative time if < 7 days
         if (diff < 7 * 24 * 60 * 60 * 1000) {
             const hours = Math.floor(diff / (60 * 60 * 1000));
             if (hours < 1) {
@@ -710,7 +966,8 @@ function formatDeadline(unixTimestamp) {
                 return `${formatted} (${mins}m left)`;
             }
             if (hours < 24) {
-                return `${formatted} (${hours}h left)`;
+                const remainingMins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+                return `${formatted} (${hours}h ${remainingMins}m left)`;
             }
             const days = Math.floor(hours / 24);
             return `${formatted} (${days}d left)`;
@@ -723,10 +980,8 @@ function formatDeadline(unixTimestamp) {
 }
 
 function parseError(err) {
-    // Try to extract a clean revert reason
     const reason = err?.reason || err?.data?.message || err?.message || 'Unknown error';
 
-    // Common revert messages from the contract
     const knownErrors = [
         'Not a member', 'Already released', 'Deadline passed',
         'Target not met', 'Deadline not passed', 'Target met, use releaseFunds',
@@ -739,30 +994,9 @@ function parseError(err) {
         }
     }
 
-    // Truncate long errors
     if (reason.length > 100) {
         return reason.substring(0, 100) + '...';
     }
 
     return reason;
-}
-
-// ─── Toast System ──────────────────────────────────────────────────
-
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-
-    const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
-    toast.innerHTML = `<strong>${icons[type] || 'ℹ'}</strong> ${message}`;
-
-    container.appendChild(toast);
-
-    // Auto-remove after 5s
-    setTimeout(() => {
-        toast.classList.add('leaving');
-        setTimeout(() => toast.remove(), 300);
-    }, 5000);
 }

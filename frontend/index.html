@@ -3,31 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AjoChain — On-Chain Group Savings</title>
-    <meta name="description" content="AjoChain: Digital ajo — pool contributions, auto-release when funded, no middleman. Built on Arbitrum.">
+    <title>AjoChain — On-Chain Group Savings & Auto-Release</title>
+    <meta name="description" content="AjoChain: Digital ajo rotating savings on Arbitrum Sepolia. Pool contributions, auto-release permissionlessly.">
 
-    <!-- Fonts -->
+    <!-- Fonts: Inter & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-    <!-- Styles -->
+    <!-- Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Toast notifications -->
+    <!-- Confetti canvas for permissionless release celebration -->
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Sonner-style stacked toast notifications container -->
     <div id="toast-container"></div>
 
     <!-- ─── Header ──────────────────────────────────────────────── -->
     <header>
         <div class="header-inner">
-            <div class="logo">
+            <div class="logo" onclick="switchTab('groups')">
                 <span class="logo-icon">⬡</span>
                 <h1>AjoChain</h1>
                 <span class="network-badge">Arbitrum Sepolia</span>
             </div>
             <div class="wallet-info">
-                <span class="wallet-address" id="wallet-display" style="display:none"></span>
+                <span class="wallet-address" id="wallet-display" style="display:none" title="Click to copy address"></span>
                 <button class="btn btn-primary" id="connect-btn">
                     Connect Wallet
                 </button>
@@ -38,35 +41,57 @@
     <div class="container">
         <!-- ─── Hero ────────────────────────────────────────────── -->
         <section class="hero">
+            <div class="hero-pill">
+                <span>✦ Built for Arbitrum Open House Singapore</span>
+            </div>
             <h2>On-Chain Group Savings</h2>
             <p>Pool contributions toward a shared goal. Funds auto-release when the target is met — <span class="hero-accent">permissionlessly</span>.</p>
         </section>
 
-        <!-- ─── Navigation Tabs ─────────────────────────────────── -->
-        <nav class="tabs" id="main-tabs">
-            <button class="tab active" data-tab="groups" id="tab-groups">
-                📋 Groups
-            </button>
-            <button class="tab" data-tab="create" id="tab-create">
-                ✦ Create Group
-            </button>
-        </nav>
+        <!-- ─── Navigation Tabs with Emil Sliding Pill ───────────── -->
+        <div class="tabs-wrapper">
+            <nav class="tabs" id="main-tabs">
+                <!-- Gliding pill indicator -->
+                <div class="tab-pill-indicator" id="tab-pill"></div>
+
+                <button class="tab active" data-tab="groups" id="tab-groups">
+                    <span>📋 Groups</span>
+                </button>
+                <button class="tab" data-tab="create" id="tab-create">
+                    <span>✦ Create Group</span>
+                </button>
+            </nav>
+        </div>
 
         <!-- ═══ Groups List View ════════════════════════════════════ -->
         <section id="groups-view" class="view active">
             <div id="groups-grid" class="groups-grid">
-                <!-- Rendered by app.js -->
+                <!-- Rendered dynamically by app.js -->
             </div>
+
+            <!-- Empty State -->
             <div id="empty-state" class="empty-state" style="display:none">
                 <div class="empty-state-icon">⬡</div>
-                <p>No groups found. Create the first one!</p>
+                <p>No active groups found. Be the first to start a savings circle!</p>
                 <button class="btn btn-primary" onclick="switchTab('create')">
-                    ✦ Create Group
+                    ✦ Create First Group
                 </button>
             </div>
-            <div id="loading-state" class="empty-state">
-                <div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto var(--space-md)"></div>
-                <p>Loading groups...</p>
+
+            <!-- Skeleton Loading State -->
+            <div id="loading-state" class="groups-grid">
+                <div class="skeleton-card">
+                    <div class="skeleton-line" style="height: 20px; width: 45%;"></div>
+                    <div class="skeleton-line" style="height: 14px; width: 75%;"></div>
+                    <div class="skeleton-line" style="height: 14px; width: 60%;"></div>
+                    <div class="skeleton-line" style="height: 4px; width: 100%; margin-top: 20px;"></div>
+                </div>
+                <div class="skeleton-card">
+                    <div class="skeleton-line" style="height: 20px; width: 40%;"></div>
+                    <div class="skeleton-line" style="height: 14px; width: 80%;"></div>
+                    <div class="skeleton-line" style="height: 14px; width: 65%;"></div>
+                    <div class="skeleton-line" style="height: 4px; width: 100%; margin-top: 20px;"></div>
+                </div>
             </div>
         </section>
 
@@ -76,14 +101,20 @@
                 <h3>Create New Group</h3>
                 <form id="create-form">
                     <div class="form-group">
-                        <label for="input-members">Member Addresses</label>
+                        <div class="form-label-row">
+                            <label for="input-members">Member Addresses</label>
+                            <button type="button" class="form-action-link" id="btn-add-my-address">
+                                + Add My Address
+                            </button>
+                        </div>
                         <textarea
                             id="input-members"
                             placeholder="0xAbc123...&#10;0xDef456...&#10;0x789Ghi..."
                             rows="4"
                         ></textarea>
-                        <span class="form-help">One Ethereum address per line. Include your own address if you want to contribute.</span>
+                        <span class="form-help">One Ethereum address per line. Members are authorized to contribute.</span>
                     </div>
+
                     <div class="form-row">
                         <div class="form-group">
                             <label for="input-target">Target Amount (USDC)</label>
@@ -94,21 +125,44 @@
                                 step="0.01"
                                 min="0.01"
                             >
+                            <!-- Quick amount presets -->
+                            <div class="preset-chips">
+                                <span class="preset-chip" onclick="setTargetAmount(25)">$25</span>
+                                <span class="preset-chip" onclick="setTargetAmount(50)">$50</span>
+                                <span class="preset-chip" onclick="setTargetAmount(100)">$100</span>
+                                <span class="preset-chip" onclick="setTargetAmount(250)">$250</span>
+                                <span class="preset-chip" onclick="setTargetAmount(500)">$500</span>
+                            </div>
                         </div>
+
                         <div class="form-group">
                             <label for="input-deadline">Deadline</label>
                             <input type="datetime-local" id="input-deadline">
+                            <!-- Quick deadline presets -->
+                            <div class="preset-chips">
+                                <span class="preset-chip" onclick="setDeadlinePreset(24)">24 Hours</span>
+                                <span class="preset-chip" onclick="setDeadlinePreset(72)">3 Days</span>
+                                <span class="preset-chip" onclick="setDeadlinePreset(168)">7 Days</span>
+                                <span class="preset-chip" onclick="setDeadlinePreset(720)">30 Days</span>
+                            </div>
                         </div>
                     </div>
+
                     <div class="form-group">
-                        <label for="input-payout">Payout Address</label>
+                        <div class="form-label-row">
+                            <label for="input-payout">Payout Address</label>
+                            <button type="button" class="form-action-link" id="btn-set-payout-mine">
+                                Set to My Wallet
+                            </button>
+                        </div>
                         <input
                             type="text"
                             id="input-payout"
-                            placeholder="0x... address that receives the funds"
+                            placeholder="0x... recipient address"
                         >
-                        <span class="form-help">The address that receives the pooled funds once the target is met.</span>
+                        <span class="form-help">The destination that receives pooled funds immediately once target is met.</span>
                     </div>
+
                     <button type="submit" class="btn btn-primary btn-lg btn-full" id="create-btn">
                         Create Group
                     </button>
@@ -128,7 +182,7 @@
                     <span id="detail-status" class="status-badge status-open">Open</span>
                 </div>
 
-                <!-- Progress -->
+                <!-- Progress Section -->
                 <div class="progress-section">
                     <div class="progress-info">
                         <span>
@@ -139,14 +193,14 @@
                     <div class="progress-bar">
                         <div class="progress-fill" id="detail-progress" style="width: 0%"></div>
                     </div>
-                    <div class="progress-percent" id="detail-percent">0%</div>
+                    <div class="progress-percent" id="detail-percent">0.0%</div>
                 </div>
 
-                <!-- Info -->
+                <!-- Info Grid -->
                 <div class="detail-info">
                     <div class="info-item">
                         <span class="info-label">Payout Address</span>
-                        <span class="info-value" id="detail-payout">—</span>
+                        <span class="info-value" id="detail-payout" style="cursor: pointer;" title="Click to copy">—</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Deadline</span>
@@ -154,7 +208,7 @@
                     </div>
                 </div>
 
-                <!-- Members -->
+                <!-- Members Section -->
                 <div class="members-section">
                     <h4>Members & Contributions</h4>
                     <div id="members-list" class="members-list">
@@ -164,7 +218,7 @@
 
                 <!-- Actions -->
                 <div class="actions" id="detail-actions">
-                    <!-- Contribute form -->
+                    <!-- Contribute Form -->
                     <div class="contribute-form" id="contribute-section" style="display:none">
                         <div class="form-group">
                             <label for="input-contribute-amount">Amount (USDC)</label>
@@ -175,12 +229,12 @@
                         </button>
                     </div>
 
-                    <!-- Release button -->
-                    <button class="btn btn-green btn-lg btn-full" id="release-btn" style="display:none" onclick="handleRelease()">
+                    <!-- Permissionless Release Showstopper Button -->
+                    <button class="btn btn-green btn-lg btn-full btn-release-ready" id="release-btn" style="display:none" onclick="handleRelease()">
                         🔓 Release Funds (Permissionless)
                     </button>
 
-                    <!-- Refund button -->
+                    <!-- Refund Button -->
                     <button class="btn btn-danger btn-lg btn-full" id="refund-btn" style="display:none" onclick="handleRefund()">
                         ↩ Refund My Contribution
                     </button>
