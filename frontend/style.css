@@ -421,6 +421,12 @@ header {
     border-radius: var(--radius-lg);
 }
 
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+}
+
 /* Showstopper Pulse for Permissionless Release */
 .btn-release-ready {
     position: relative;

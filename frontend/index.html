@@ -27,9 +27,12 @@
             <div class="logo" onclick="switchTab('groups')">
                 <span class="logo-icon">⬡</span>
                 <h1>AjoChain</h1>
-                <span class="network-badge">Arbitrum Sepolia</span>
+                <span class="network-badge" id="network-badge" onclick="ensureCorrectNetwork()" style="cursor: pointer;" title="Click to switch or auto-add Arbitrum Sepolia network">Arbitrum Sepolia</span>
             </div>
             <div class="wallet-info">
+                <button class="btn btn-secondary btn-sm" id="btn-add-usdc" onclick="addUSDCToWallet()" style="display:none" title="Import test USDC token into MetaMask">
+                    + USDC
+                </button>
                 <span class="wallet-address" id="wallet-display" style="display:none" title="Click to copy address"></span>
                 <button class="btn btn-primary" id="connect-btn">
                     Connect Wallet

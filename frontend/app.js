@@ -6,13 +6,26 @@
 // ─── Configuration ─────────────────────────────────────────────────
 const CONFIG = {
     AJOGROUP_ADDRESS: '0x_YOUR_AJOGROUP_CONTRACT_ADDRESS',
-    USDC_ADDRESS: '0x_YOUR_USDC_TOKEN_ADDRESS',
+    USDC_ADDRESS: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
     USDC_DECIMALS: 6,
     API_BASE: '', // Set to 'http://localhost:8080/api' when Go backend is running
+
+    // Arbitrum Sepolia Chain Parameters (EIP-3085 & EIP-3326 compliant)
     CHAIN_ID: 421614,
+    CHAIN_HEX: '0x66eee',
     CHAIN_NAME: 'Arbitrum Sepolia',
     RPC_URL: 'https://sepolia-rollup.arbitrum.io/rpc',
+    RPC_URLS: [
+        'https://sepolia-rollup.arbitrum.io/rpc',
+        'https://arbitrum-sepolia-rpc.publicnode.com',
+        'https://arbitrum-sepolia.blockpi.network/v1/rpc/public',
+    ],
     EXPLORER_URL: 'https://sepolia.arbiscan.io',
+    NATIVE_CURRENCY: {
+        name: 'Arbitrum Sepolia Ether',
+        symbol: 'ETH',
+        decimals: 18,
+    },
 };
 
 // ─── Contract ABIs ─────────────────────────────────────────────────
@@ -212,6 +225,103 @@ function setMyAddressAsPayout() {
     }
 }
 
+// ─── Network Management (EIP-3085 Auto-Integration & EIP-3326) ─────
+
+async function ensureCorrectNetwork() {
+    if (!window.ethereum) {
+        showToast('MetaMask or Web3 wallet not detected', 'error');
+        return false;
+    }
+
+    try {
+        const currentChainHex = await window.ethereum.request({ method: 'eth_chainId' });
+        if (parseInt(currentChainHex, 16) === CONFIG.CHAIN_ID) {
+            return true;
+        }
+
+        // Step 1: Attempt to switch to Arbitrum Sepolia
+        try {
+            await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: CONFIG.CHAIN_HEX }],
+            });
+            return true;
+        } catch (switchError) {
+            // User rejected prompt
+            if (switchError.code === 4001 || switchError?.message?.includes('rejected')) {
+                showToast('Please switch your wallet to Arbitrum Sepolia', 'warning', 'Network Required');
+                return false;
+            }
+
+            // Step 2: If chain is not added yet (code 4902 or unrecognized error)
+            const isUnrecognizedChain =
+                switchError.code === 4902 ||
+                switchError?.data?.originalError?.code === 4902 ||
+                switchError.code === -32603 ||
+                /unrecognized|not found|unknown chain|could not find|wallet_addEthereumChain/i.test(switchError.message || '');
+
+            if (isUnrecognizedChain) {
+                showToast('Adding Arbitrum Sepolia to your wallet...', 'info', 'Network Setup');
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: CONFIG.CHAIN_HEX,
+                            chainName: CONFIG.CHAIN_NAME,
+                            nativeCurrency: CONFIG.NATIVE_CURRENCY,
+                            rpcUrls: CONFIG.RPC_URLS,
+                            blockExplorerUrls: [CONFIG.EXPLORER_URL],
+                        }],
+                    });
+                    showToast('Arbitrum Sepolia added & connected! ⬡', 'success', 'Network Added');
+                    return true;
+                } catch (addError) {
+                    if (addError.code === 4001 || addError?.message?.includes('rejected')) {
+                        showToast('Network addition was cancelled in your wallet', 'warning');
+                    } else {
+                        console.error('wallet_addEthereumChain error:', addError);
+                        showToast('Failed to add Arbitrum Sepolia: ' + (addError.message || addError), 'error');
+                    }
+                    return false;
+                }
+            } else {
+                console.error('wallet_switchEthereumChain error:', switchError);
+                showToast('Failed to switch network: ' + (switchError.message || switchError), 'error');
+                return false;
+            }
+        }
+    } catch (err) {
+        console.error('ensureCorrectNetwork error:', err);
+        return false;
+    }
+}
+
+// 1-Click USDC Token Import via EIP-747 (wallet_watchAsset)
+async function addUSDCToWallet() {
+    if (!window.ethereum) {
+        showToast('Please connect your wallet first', 'warning');
+        return;
+    }
+    try {
+        await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address: CONFIG.USDC_ADDRESS,
+                    symbol: 'USDC',
+                    decimals: CONFIG.USDC_DECIMALS,
+                },
+            },
+        });
+        showToast('USDC token imported to wallet! 🪙', 'success', 'Token Added');
+    } catch (err) {
+        if (err.code !== 4001) {
+            console.warn('Watch asset skipped:', err);
+        }
+    }
+}
+
 // ─── Wallet Connection ─────────────────────────────────────────────
 async function connectWallet() {
     if (!window.ethereum) {
@@ -227,34 +337,16 @@ async function connectWallet() {
         provider = new ethers.BrowserProvider(window.ethereum);
         await provider.send('eth_requestAccounts', []);
 
-        // Check network
-        const network = await provider.getNetwork();
-        if (Number(network.chainId) !== CONFIG.CHAIN_ID) {
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x' + CONFIG.CHAIN_ID.toString(16) }],
-                });
-                provider = new ethers.BrowserProvider(window.ethereum);
-            } catch (switchError) {
-                if (switchError.code === 4902) {
-                    await window.ethereum.request({
-                        method: 'wallet_addEthereumChain',
-                        params: [{
-                            chainId: '0x' + CONFIG.CHAIN_ID.toString(16),
-                            chainName: CONFIG.CHAIN_NAME,
-                            rpcUrls: [CONFIG.RPC_URL],
-                            blockExplorerUrls: [CONFIG.EXPLORER_URL],
-                            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-                        }],
-                    });
-                    provider = new ethers.BrowserProvider(window.ethereum);
-                } else {
-                    throw switchError;
-                }
-            }
+        // Ensure Arbitrum Sepolia is selected (auto-switches or auto-adds)
+        const networkOk = await ensureCorrectNetwork();
+        if (!networkOk) {
+            btn.textContent = 'Switch Network';
+            btn.disabled = false;
+            return;
         }
 
+        // Refresh provider to bind to the confirmed network
+        provider = new ethers.BrowserProvider(window.ethereum);
         signer = await provider.getSigner();
         userAddress = await signer.getAddress();
 
@@ -271,6 +363,10 @@ async function connectWallet() {
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-secondary');
         btn.disabled = false;
+
+        // Show + USDC import button in header
+        const btnAddUsdc = document.getElementById('btn-add-usdc');
+        if (btnAddUsdc) btnAddUsdc.style.display = 'inline-flex';
 
         showToast(`Connected: ${shortAddr}`, 'success', 'Wallet Connected');
 
@@ -565,6 +661,9 @@ async function handleCreateGroup(e) {
         return;
     }
 
+    const networkOk = await ensureCorrectNetwork();
+    if (!networkOk) return;
+
     const membersRaw = document.getElementById('input-members').value;
     const targetRaw = document.getElementById('input-target').value;
     const deadlineRaw = document.getElementById('input-deadline').value;
@@ -653,6 +752,9 @@ async function handleContribute() {
         return;
     }
 
+    const networkOk = await ensureCorrectNetwork();
+    if (!networkOk) return;
+
     const input = document.getElementById('input-contribute-amount');
     const amountRaw = input.value;
     const amountNum = parseFloat(amountRaw);
@@ -711,6 +813,9 @@ async function handleRelease() {
         return;
     }
 
+    const networkOk = await ensureCorrectNetwork();
+    if (!networkOk) return;
+
     const btn = document.getElementById('release-btn');
     const originalText = btn.innerHTML;
 
@@ -746,6 +851,9 @@ async function handleRefund() {
         showToast('Connect your wallet first', 'warning');
         return;
     }
+
+    const networkOk = await ensureCorrectNetwork();
+    if (!networkOk) return;
 
     const btn = document.getElementById('refund-btn');
     const originalText = btn.innerHTML;
