@@ -892,6 +892,12 @@ function escapeHtml(value) {
 function showToast(message, type = 'info', title = null) {
     const container = document.getElementById('toast-container');
     if (!container) return;
+    const escapeHtml = (value) => String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
     const id = Date.now() + Math.random().toString(36).substr(2, 5);
     const toast = document.createElement('div');
