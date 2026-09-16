@@ -880,6 +880,15 @@ async function handleRefund() {
 }
 
 // ─── Sonner-Style Stacked Toast Notifications ──────────────────────
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function showToast(message, type = 'info', title = null) {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -909,11 +918,14 @@ function showToast(message, type = 'info', title = null) {
         warning: 'Warning'
     };
 
+    const safeTitle = escapeHtml(title || defaultTitles[type]);
+    const safeMessage = escapeHtml(message);
+
     toast.innerHTML = `
         <span class="toast-icon">${icons[type] || 'ℹ'}</span>
         <div class="toast-content">
-            <div class="toast-title">${escapeHtml(title || defaultTitles[type])}</div>
-            <div class="toast-message">${escapeHtml(message)}</div>
+            <div class="toast-title">${safeTitle}</div>
+            <div class="toast-message">${safeMessage}</div>
         </div>
         <button class="toast-close" onclick="dismissToast('${id}')">✕</button>
     `;
