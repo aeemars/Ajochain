@@ -883,6 +883,12 @@ async function handleRefund() {
 function showToast(message, type = 'info', title = null) {
     const container = document.getElementById('toast-container');
     if (!container) return;
+    const escapeHtml = (value) => String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
     const id = Date.now() + Math.random().toString(36).substr(2, 5);
     const toast = document.createElement('div');
@@ -906,8 +912,8 @@ function showToast(message, type = 'info', title = null) {
     toast.innerHTML = `
         <span class="toast-icon">${icons[type] || 'ℹ'}</span>
         <div class="toast-content">
-            <div class="toast-title">${title || defaultTitles[type]}</div>
-            <div class="toast-message">${message}</div>
+            <div class="toast-title">${escapeHtml(title || defaultTitles[type])}</div>
+            <div class="toast-message">${escapeHtml(message)}</div>
         </div>
         <button class="toast-close" onclick="dismissToast('${id}')">✕</button>
     `;
